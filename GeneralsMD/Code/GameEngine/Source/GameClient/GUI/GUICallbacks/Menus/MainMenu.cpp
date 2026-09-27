@@ -74,7 +74,6 @@
 #include "GameNetwork/GameSpy/MainMenuUtils.h"
 
 #include "GameClient/InGameUI.h"
-#include <cstdlib>
 
 // GeneralsX @feature BenderAI 21/04/2026 In-game update checker for tagged release builds
 #ifdef SAGE_UPDATE_CHECK
@@ -1611,22 +1610,6 @@ WindowMsgHandledType MainMenuSystem( GameWindow *window, UnsignedInt msg,
 			{
 				if(dontAllowTransitions)
 					break;
-
-				// GEN: Online means our own central server. No GameSpy/GeneralsOnline
-				// authentication or third-party matchmaking is involved.
-				if (std::getenv("GEN_AUTHORITY_HOST") != nullptr)
-				{
-					dontAllowTransitions = TRUE;
-					buttonPushed = TRUE;
-					dropDownWindows[DROPDOWN_MULTIPLAYER]->winHide(FALSE);
-					TheTransitionHandler->reverse("MainMenuMultiPlayerMenuTransitionToNext");
-					TheShell->push("Menus/LanLobbyMenu.wnd");
-					TheScriptEngine->signalUIInteract(TheShellHookNames[SHELL_SCRIPT_HOOK_MAIN_MENU_NETWORK_SELECTED]);
-					dropDown = DROPDOWN_NONE;
-					fprintf(stderr, "[GEN] Online -> central GEN server lobby\n");
-					fflush(stderr);
-					break;
-				}
 
 #if defined(SAGE_USE_NGMP) && defined(SAGE_UPDATE_CHECK)
 				// GeneralsX @feature GeneralsOnline - In production mode, require latest game version

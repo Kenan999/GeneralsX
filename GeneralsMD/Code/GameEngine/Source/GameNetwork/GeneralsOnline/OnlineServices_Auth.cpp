@@ -9,6 +9,7 @@
 #include "GameNetwork/GameSpyOverlay.h"
 #include "Common/GlobalData.h"
 #include <cstdio>
+#include <cstdlib>
 #include <thread>
 #include <chrono>
 #include "GameNetwork/GeneralsOnline/NGMP_json.h"
@@ -79,7 +80,22 @@ void NGMP_OnlineServicesManager::beginBrowserLogin() {
         return;
     }
 
-    if (NGMP::IsDevelopment()) {
+    if (std::getenv("GEN_AUTHORITY_HOST") != nullptr) {
+        // Our GEN backend runs in development mode for the current test
+        // environment, but unlike the upstream ILOVECODE shortcut we still
+        // register a real pending code. The server auto-approves that code, so
+        // the normal Online UI opens without a browser or third-party login.
+        std::string serverCode = RequestLoginCodeFromServer();
+        if (serverCode.empty()) {
+            fprintf(stderr, "[GEN] failed to obtain login code from GEN server\n");
+            fflush(stderr);
+            m_waitingBrowserLogin = false;
+            return;
+        }
+        m_gamecode = serverCode;
+        fprintf(stderr, "[GEN] GEN server login code registered; authenticating locally\n");
+        fflush(stderr);
+    } else if (NGMP::IsDevelopment()) {
         m_gamecode = "ILOVECODE";
         fprintf(stderr, "[NGMP] Development mode detected: using bypass gamecode ILOVECODE\n");
         fflush(stderr);
