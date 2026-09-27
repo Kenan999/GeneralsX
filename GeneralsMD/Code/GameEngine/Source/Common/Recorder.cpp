@@ -42,6 +42,7 @@
 
 #include "GameNetwork/LANAPICallbacks.h"
 #include "GameNetwork/GameMessageParser.h"
+#include "GameNetwork/GeneralsOnline/NGMPGame.h"
 #include "GameNetwork/GameSpy/PeerDefs.h"
 #include "GameNetwork/networkutil.h"
 #include "GameLogic/GameLogic.h"
@@ -580,10 +581,19 @@ void RecorderClass::startRecording(GameDifficulty diff, Int originalGameMode, In
 				}
 			}
 		}
-		else
+		else if (TheNGMPGame)
+		{
+			theSlotList = GameInfoToAsciiString(TheNGMPGame);
+			localIndex = TheNGMPGame->getLocalSlotNum();
+		}
+		else if (TheGameSpyGame)
 		{
 			theSlotList = GameInfoToAsciiString(TheGameSpyGame);
 			localIndex = TheGameSpyGame->getLocalSlotNum();
+		}
+		else
+		{
+			RELEASE_CRASH(("Network recording started without a GameInfo source"));
 		}
 	}
 	else

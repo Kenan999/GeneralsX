@@ -158,3 +158,7 @@ public:
 };
 
 extern NGMPGame* TheNGMPGame;
+
+// Starts a headless GEN authority participant from environment configuration.
+// Returns true when authority mode was requested (even if launch validation fails).
+Bool StartGenAuthorityHeadlessFromEnvironment();

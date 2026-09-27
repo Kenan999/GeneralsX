@@ -106,6 +106,8 @@
 #include "GameClient/GUICallbacks.h"
 
 #include "GameNetwork/NetworkInterface.h"
+#include "GameNetwork/GeneralsOnline/NGMPGame.h"
+#include <cstdlib>
 #include "GameNetwork/WOLBrowser/WebBrowser.h"
 #include "GameNetwork/LANAPI.h"
 #include "GameNetwork/GameSpy/GameResultsThread.h"
@@ -640,7 +642,11 @@ void GameEngine::init()
 	#endif/////////////////////////////////////////////////////////////////////////////////////////////
 		initSubsystem(TheAudio,"TheAudio", createAudioManager(TheGlobalData->m_headless), nullptr);
 		if (!TheAudio->isMusicAlreadyLoaded())
-			setQuitting(TRUE);
+		{
+			const char* authorityRole = std::getenv("GEN_AUTHORITY_ROLE");
+			if (!(TheGlobalData->m_headless && authorityRole && stricmp(authorityRole, "authority") == 0))
+				setQuitting(TRUE);
+		}
 
 #if RTS_ZEROHOUR && RETAIL_COMPATIBLE_CRC
 		TheNameKeyGenerator->syncNameKeyID();
@@ -810,6 +816,9 @@ void GameEngine::init()
 		// initialize the MapCache
 		TheMapCache = MSGNEW("GameEngineSubsystem") MapCache;
 		TheMapCache->updateCache();
+
+		// Dedicated GEN authority starts only after gameplay data and map cache are ready.
+		StartGenAuthorityHeadlessFromEnvironment();
 
 
 	#ifdef DUMP_PERF_STATS///////////////////////////////////////////////////////////////////////////

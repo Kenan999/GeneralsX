@@ -2056,6 +2056,13 @@ void ConnectionManager::parseUserList(const GameInfo *game)
 	TheMemoryPoolFactory->debugSetInitFillerIndex(m_localSlot);
 #endif
 
+	if (std::getenv("GEN_AUTHORITY_HOST") != nullptr)
+	{
+		// Slot 7 is the dedicated Linux authority in GEN mode. Every client
+		// sends through it; no player is selected as a peer packet router.
+		m_packetRouterSlot = 7;
+	}
+
 	/*
 	if ( numUsers < 2 || m_localSlot == -1 )
 	{

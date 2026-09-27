@@ -1383,7 +1383,9 @@ void GameLogic::tryStartNewGame( Bool loadingSaveGame )
 	//****************************//
 
 	// Get the m_loadScreen for this kind of game
-	if(!m_loadScreen && !(TheRecorder && TheRecorder->getMode() == RECORDERMODETYPE_SIMULATION_PLAYBACK))
+	const char* genAuthorityRole = std::getenv("GEN_AUTHORITY_ROLE");
+	const Bool genHeadlessAuthority = TheGlobalData->m_headless && genAuthorityRole && stricmp(genAuthorityRole, "authority") == 0;
+	if(!m_loadScreen && !genHeadlessAuthority && !(TheRecorder && TheRecorder->getMode() == RECORDERMODETYPE_SIMULATION_PLAYBACK))
 	{
 		m_loadScreen = getLoadScreen( loadingSaveGame );
 		if(m_loadScreen)

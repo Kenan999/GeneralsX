@@ -230,6 +230,14 @@ Int NGMPGame::getLocalSlotNum(void) const
 	if (!m_inGame)
 		return -1;
 
+	const char* authorityRole = std::getenv("GEN_AUTHORITY_ROLE");
+	if (authorityRole && stricmp(authorityRole, "authority") == 0)
+	{
+		const char* slot = std::getenv("GEN_AUTHORITY_SLOT");
+		Int s = slot ? atoi(slot) : 7;
+		return (s >= 0 && s < MAX_SLOTS) ? s : -1;
+	}
+
 	NGMP_OnlineServices_AuthInterface* pAuthInterface = NGMP_OnlineServicesManager::GetInterface<NGMP_OnlineServices_AuthInterface>();
 	if (pAuthInterface == nullptr)
 	{
@@ -296,6 +304,26 @@ AsciiString NGMPGame::generateLadderGameResultsPacket(void)
 
 void NGMPGame::launchGame(void)
 {
+	// GEN authoritative mode adds a deterministic hidden observer slot on every
+	// participant. Slot 7 is the Linux authority and packet router; it has no
+	// playable army/start position and therefore never owns player input.
+	if (std::getenv("GEN_AUTHORITY_HOST") != nullptr)
+	{
+		NGMPGameSlot* authoritySlot = getGameSpySlot(7);
+		if (authoritySlot && !authoritySlot->isHuman())
+		{
+			UnicodeString authorityName; authorityName.translate("GEN Authority");
+			authoritySlot->setState(SLOT_PLAYER, authorityName, 7);
+			authoritySlot->setPort(8888);
+			authoritySlot->setPlayerTemplate(PLAYERTEMPLATE_OBSERVER);
+			authoritySlot->setStartPos(-1);
+			authoritySlot->setColor(-1);
+			authoritySlot->setTeamNumber(-1);
+			authoritySlot->setMapAvailability(TRUE);
+			authoritySlot->setAccept();
+		}
+	}
+
 	setGameInProgress(TRUE);
 
 	if (TheNetwork != NULL) {
@@ -379,6 +407,64 @@ void NGMPGame::launchGame(void)
 		notifMsg.format(L"Map: %hs\nPress F5 or INSERT to open the communicator.", strMapName.c_str());
 		showNotificationBox(AsciiString::TheEmptyString, notifMsg);
 	}
+}
+
+Bool StartGenAuthorityHeadlessFromEnvironment()
+{
+	const char* role = std::getenv("GEN_AUTHORITY_ROLE");
+	if (!role || stricmp(role, "authority") != 0)
+		return FALSE;
+
+	if (TheNGMPGame != nullptr)
+		delete TheNGMPGame;
+	TheNGMPGame = NEW NGMPGame;
+
+	const char* mapEnv = std::getenv("GEN_AUTHORITY_MAP");
+	AsciiString mapName = (mapEnv && *mapEnv) ? mapEnv : "07maps/tournament desert";
+	const char* seedEnv = std::getenv("GEN_AUTHORITY_SEED");
+	const Int seed = seedEnv ? atoi(seedEnv) : 4634785;
+	const char* matchEnv = std::getenv("GEN_AUTHORITY_MATCH_ID");
+	const Int matchID = matchEnv ? atoi(matchEnv) : 1;
+	const char* clientsEnv = std::getenv("GEN_AUTHORITY_CLIENTS");
+	Int clients = clientsEnv ? atoi(clientsEnv) : 2;
+	if (clients < 1) clients = 1;
+	if (clients > 7) clients = 7;
+
+	TheNGMPGame->setMap(mapName);
+	TheNGMPGame->setSeed(seed);
+	TheNGMPGame->setUseStats(FALSE);
+	TheNGMPGame->setAllowObservers(TRUE);
+
+	for (Int i = 0; i < clients; ++i)
+	{
+		NGMPGameSlot* slot = TheNGMPGame->getGameSpySlot(i);
+		UnicodeString name; name.format(L"GEN Client %d", i + 1);
+		slot->setState(SLOT_PLAYER, name, static_cast<UnsignedInt>(i));
+		slot->setPort(8888);
+		slot->setPlayerTemplate(PLAYERTEMPLATE_RANDOM);
+		slot->setColor(i);
+		slot->setStartPos(i);
+		slot->setTeamNumber(-1);
+		slot->setMapAvailability(TRUE);
+		slot->setAccept();
+	}
+
+	NGMPGameSlot* authoritySlot = TheNGMPGame->getGameSpySlot(7);
+	UnicodeString authorityName; authorityName.translate("GEN Authority");
+	authoritySlot->setState(SLOT_PLAYER, authorityName, 7);
+	authoritySlot->setPort(8888);
+	authoritySlot->setPlayerTemplate(PLAYERTEMPLATE_OBSERVER);
+	authoritySlot->setStartPos(-1);
+	authoritySlot->setColor(-1);
+	authoritySlot->setTeamNumber(-1);
+	authoritySlot->setMapAvailability(TRUE);
+	authoritySlot->setAccept();
+
+	fprintf(stderr, "[GEN-AUTH] launching headless authority match=%d map='%s' clients=%d seed=%d\n",
+		matchID, mapName.str(), clients, seed);
+	fflush(stderr);
+	TheNGMPGame->startGame(matchID);
+	return TRUE;
 }
 
 void NGMPGame::reset(void)
