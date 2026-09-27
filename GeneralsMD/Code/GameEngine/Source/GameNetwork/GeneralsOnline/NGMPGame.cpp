@@ -309,6 +309,32 @@ void NGMPGame::launchGame(void)
 	// playable army/start position and therefore never owns player input.
 	if (std::getenv("GEN_AUTHORITY_HOST") != nullptr)
 	{
+		// First GEN test profile deliberately freezes gameplay setup so the
+		// Linux authority and every platform client construct identical state.
+		const char* forcedMap = std::getenv("GEN_AUTHORITY_MAP");
+		if (forcedMap && *forcedMap) setMap(forcedMap);
+		const char* forcedSeed = std::getenv("GEN_AUTHORITY_SEED");
+		if (forcedSeed && *forcedSeed) setSeed(atoi(forcedSeed));
+		setUseStats(FALSE);
+		setSuperweaponRestriction(0);
+		setOldFactionsOnly(FALSE);
+
+		const char* clientCountEnv = std::getenv("GEN_AUTHORITY_CLIENTS");
+		Int clientCount = clientCountEnv ? atoi(clientCountEnv) : 2;
+		if (clientCount < 1) clientCount = 1;
+		if (clientCount > 7) clientCount = 7;
+		for (Int i = 0; i < clientCount; ++i)
+		{
+			NGMPGameSlot* clientSlot = getGameSpySlot(i);
+			if (clientSlot && clientSlot->isHuman())
+			{
+				clientSlot->setPlayerTemplate(PLAYERTEMPLATE_RANDOM);
+				clientSlot->setColor(i);
+				clientSlot->setStartPos(i);
+				clientSlot->setTeamNumber(-1);
+			}
+		}
+
 		NGMPGameSlot* authoritySlot = getGameSpySlot(7);
 		if (authoritySlot && !authoritySlot->isHuman())
 		{
