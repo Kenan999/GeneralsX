@@ -30,6 +30,7 @@
 
 #include "GameNetwork/udp.h"
 #include "GameNetwork/NetworkDefs.h"
+#include <cstdint>
 
 /**
  * The transport layer handles the UDP socket for the game, and will packetize and
@@ -85,6 +86,13 @@ protected:
 	// Latency insertion and packet loss
 	Bool m_useLatency;
 	Bool m_usePacketLoss;
+
+	// GEN central lobby tunnel. Only the legacy lobby transport (UDP 8086)
+	// uses this path; gameplay authority uses the dedicated match transport.
+	Bool m_genLobbyRelay;
+	UnsignedInt m_genRelayIP;
+	UnsignedShort m_genRelayPort;
+	uint64_t m_genRelayRealm;
 
 	// Bandwidth metrics
 	UnsignedInt m_incomingBytes[MAX_TRANSPORT_STATISTICS_SECONDS];

@@ -28,6 +28,8 @@
 #include "Common/crc.h"
 #include "GameNetwork/Transport.h"
 #include "GameNetwork/NetworkInterface.h"
+#include <cstdlib>
+#include <vector>
 
 
 //--------------------------------------------------------------------------
@@ -65,12 +67,47 @@ static inline void decryptBuf( unsigned char *buf, Int len )
 	}
 }
 
+// GEN central relay framing. This deliberately lives below the legacy
+// Transport API so LAN lobby code remains unchanged.
+namespace {
+constexpr UnsignedInt GEN_RELAY_MAGIC = 0x414e4547u;
+constexpr UnsignedShort GEN_RELAY_VERSION = 1;
+constexpr UnsignedByte GEN_RELAY_KIND_LOBBY = 3;
+constexpr size_t GEN_RELAY_HEADER = 20;
+
+static void genPut16(std::vector<UnsignedByte>& b, UnsignedShort v) { b.push_back(v & 0xff); b.push_back((v >> 8) & 0xff); }
+static void genPut32(std::vector<UnsignedByte>& b, UnsignedInt v) { for (Int i=0;i<4;++i) b.push_back((v >> (8*i)) & 0xff); }
+static void genPut64(std::vector<UnsignedByte>& b, uint64_t v) { for (Int i=0;i<8;++i) b.push_back((v >> (8*i)) & 0xff); }
+static UnsignedShort genGet16(const UnsignedByte* p) { return static_cast<UnsignedShort>(p[0] | (static_cast<UnsignedShort>(p[1]) << 8)); }
+static UnsignedInt genGet32(const UnsignedByte* p) { UnsignedInt v=0; for(Int i=0;i<4;++i) v |= static_cast<UnsignedInt>(p[i]) << (8*i); return v; }
+static uint64_t genGet64(const UnsignedByte* p) { uint64_t v=0; for(Int i=0;i<8;++i) v |= static_cast<uint64_t>(p[i]) << (8*i); return v; }
+
+static UnsignedInt genVirtualLobbyIP(UnsignedByte peer) {
+	return 0x0AFE0000u | static_cast<UnsignedInt>(peer); // 10.254.0.<peer>
+}
+static UnsignedByte genPeerFromVirtualIP(UnsignedInt ip) {
+	return ((ip & 0xffffff00u) == 0x0AFE0000u) ? static_cast<UnsignedByte>(ip & 0xffu) : 0xff;
+}
+static std::vector<UnsignedByte> genLobbyFrame(uint64_t realm, UnsignedByte dst, const UnsignedByte* payload, size_t len) {
+	std::vector<UnsignedByte> b; b.reserve(GEN_RELAY_HEADER + len);
+	genPut32(b, GEN_RELAY_MAGIC); genPut16(b, GEN_RELAY_VERSION);
+	b.push_back(GEN_RELAY_KIND_LOBBY); b.push_back(0); // client role
+	genPut64(b, realm); b.push_back(0xff); b.push_back(dst); genPut16(b, static_cast<UnsignedShort>(len));
+	b.insert(b.end(), payload, payload + len);
+	return b;
+}
+}
+
 //--------------------------------------------------------------------------
 
 Transport::Transport()
 {
 	m_winsockInit = false;
 	m_udpsock = nullptr;
+	m_genLobbyRelay = FALSE;
+	m_genRelayIP = 0;
+	m_genRelayPort = 47000;
+	m_genRelayRealm = 1;
 }
 
 Transport::~Transport()
@@ -165,6 +202,27 @@ Bool Transport::init( UnsignedInt ip, UnsignedShort port )
 
 	m_port = port;
 
+	m_genLobbyRelay = FALSE;
+	if (port == 8086)
+	{
+		const char* relayHost = std::getenv("GEN_AUTHORITY_HOST");
+		if (relayHost && *relayHost)
+		{
+			m_genRelayIP = ResolveIP(AsciiString(relayHost));
+			const char* relayPort = std::getenv("GEN_AUTHORITY_PORT");
+			if (relayPort && *relayPort) m_genRelayPort = static_cast<UnsignedShort>(atoi(relayPort));
+			const char* realm = std::getenv("GEN_LOBBY_REALM");
+			if (realm && *realm) m_genRelayRealm = static_cast<uint64_t>(strtoull(realm, nullptr, 10));
+			m_genLobbyRelay = (m_genRelayIP != 0 && m_genRelayPort != 0);
+			if (m_genLobbyRelay) {
+				fprintf(stderr, "[GEN] central lobby connected to %d.%d.%d.%d:%u realm=%llu\n",
+					PRINTF_IP_AS_4_INTS(m_genRelayIP), m_genRelayPort,
+					static_cast<unsigned long long>(m_genRelayRealm));
+				fflush(stderr);
+			}
+		}
+	}
+
 #if defined(RTS_DEBUG)
 	if (TheGlobalData->m_latencyAverage > 0 || TheGlobalData->m_latencyNoise)
 		m_useLatency = true;
@@ -238,8 +296,21 @@ Bool Transport::doSend() {
 			// But the max network message size needs to include the bytes of the transport message header and equal the max udp payload
 			// Therefore, transmitted data needs to add the extra bytes of the network header to the payloads length
 			int bytesToSend = m_outBuffer[i].length + sizeof(TransportMessageHeader);
-			// Send this message
-			if ((bytesSent = m_udpsock->Write((unsigned char *)(&m_outBuffer[i]), bytesToSend, m_outBuffer[i].addr, m_outBuffer[i].port)) > 0)
+			// Send this message. In GEN Online mode, lobby datagrams are tunneled
+			// through our central relay instead of LAN broadcast/GameSpy.
+			if (m_genLobbyRelay)
+			{
+				UnsignedByte dst = genPeerFromVirtualIP(m_outBuffer[i].addr);
+				auto wire = genLobbyFrame(m_genRelayRealm, dst,
+					reinterpret_cast<const UnsignedByte*>(&m_outBuffer[i]), static_cast<size_t>(bytesToSend));
+				bytesSent = m_udpsock->Write(wire.data(), static_cast<UnsignedInt>(wire.size()), m_genRelayIP, m_genRelayPort);
+				if (bytesSent == static_cast<Int>(wire.size())) bytesSent = bytesToSend;
+			}
+			else
+			{
+				bytesSent = m_udpsock->Write((unsigned char *)(&m_outBuffer[i]), bytesToSend, m_outBuffer[i].addr, m_outBuffer[i].port);
+			}
+			if (bytesSent > 0)
 			{
 				//DEBUG_LOG(("Sending %d bytes to %d.%d.%d.%d:%d", bytesToSend, PRINTF_IP_AS_4_INTS(m_outBuffer[i].addr), m_outBuffer[i].port));
 				m_outgoingPackets[m_statisticsSlot]++;
@@ -310,11 +381,36 @@ Bool Transport::doRecv()
 	// Therefore, when receiving data we use the max udp payload size to receive the game packet payload and network header
 	TransportMessage incomingMessage;
 	unsigned char *buf = (unsigned char *)&incomingMessage;
+	std::vector<unsigned char> genRaw(MAX_NETWORK_MESSAGE_LEN + GEN_RELAY_HEADER);
 	int len = MAX_NETWORK_MESSAGE_LEN;
 	size_t bufferIndex = 0;
 //	DEBUG_LOG(("Transport::doRecv - checking"));
-	while ( (len=m_udpsock->Read(buf, MAX_NETWORK_MESSAGE_LEN, &from)) > 0 )
+	while (true)
 	{
+		if (m_genLobbyRelay)
+		{
+			len = m_udpsock->Read(genRaw.data(), static_cast<UnsignedInt>(genRaw.size()), &from);
+			if (len <= 0) break;
+			if (static_cast<size_t>(len) < GEN_RELAY_HEADER ||
+				genGet32(genRaw.data()) != GEN_RELAY_MAGIC ||
+				genGet16(genRaw.data()+4) != GEN_RELAY_VERSION ||
+				genRaw[6] != GEN_RELAY_KIND_LOBBY ||
+				genGet64(genRaw.data()+8) != m_genRelayRealm)
+				continue;
+			const UnsignedShort payloadLen = genGet16(genRaw.data()+18);
+			if (static_cast<size_t>(len) != GEN_RELAY_HEADER + payloadLen || payloadLen > MAX_NETWORK_MESSAGE_LEN)
+				continue;
+			std::memcpy(buf, genRaw.data()+GEN_RELAY_HEADER, payloadLen);
+			len = payloadLen;
+			// Present the relay peer as a stable virtual LAN IP.
+			from.sin_addr.s_addr = htonl(genVirtualLobbyIP(genRaw[16]));
+			from.sin_port = htons(8086);
+		}
+		else
+		{
+			len = m_udpsock->Read(buf, MAX_NETWORK_MESSAGE_LEN, &from);
+			if (len <= 0) break;
+		}
 #if defined(RTS_DEBUG)
 		// Packet loss simulation
 		if (m_usePacketLoss)
