@@ -71,6 +71,18 @@ echo "  Copying GeneralsXZH..."
 cp -v "${BINARY_SRC}" "${RUNTIME_DIR}/GeneralsXZH"
 chmod +x "${RUNTIME_DIR}/GeneralsXZH"
 
+# Repair stale per-user Homebrew install names that can be embedded when a
+# developer migrated from ~/homebrew to /opt/homebrew. Keep the deployed
+# binary portable across that local migration before first launch.
+if command -v otool >/dev/null 2>&1 && command -v install_name_tool >/dev/null 2>&1 && command -v brew >/dev/null 2>&1; then
+    BAD_LIBPNG="$(otool -L "${RUNTIME_DIR}/GeneralsXZH" | awk '/\/homebrew\/opt\/libpng\/lib\/libpng16\.16\.dylib/ {gsub(/^[ \t]+/, "", $1); print $1; exit}')"
+    GOOD_LIBPNG="$(brew --prefix libpng 2>/dev/null)/lib/libpng16.16.dylib"
+    if [[ -n "${BAD_LIBPNG}" && "${BAD_LIBPNG}" != "${GOOD_LIBPNG}" && -f "${GOOD_LIBPNG}" ]]; then
+        echo "  Repairing libpng install name: ${BAD_LIBPNG} -> ${GOOD_LIBPNG}"
+        install_name_tool -change "${BAD_LIBPNG}" "${GOOD_LIBPNG}" "${RUNTIME_DIR}/GeneralsXZH"
+    fi
+fi
+
 echo "  Copying SDL3 libraries..."
 cp -v "${SDL3_LIB_DIR}"/libSDL3.0.dylib "${RUNTIME_DIR}/"
 ln -sf libSDL3.0.dylib "${RUNTIME_DIR}/libSDL3.dylib" 2>/dev/null || true
