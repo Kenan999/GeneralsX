@@ -80,7 +80,7 @@ void NGMP_OnlineServicesManager::beginBrowserLogin() {
         return;
     }
 
-    if (std::getenv("GEN_AUTHORITY_HOST") != nullptr) {
+    if (std::getenv("GEN_PRIVATE_ONLINE") != nullptr) {
         // Our GEN backend runs in development mode for the current test
         // environment, but unlike the upstream ILOVECODE shortcut we still
         // register a real pending code. The server auto-approves that code, so
