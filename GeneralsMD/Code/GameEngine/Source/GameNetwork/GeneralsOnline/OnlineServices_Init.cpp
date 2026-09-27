@@ -13,6 +13,7 @@
 #include "GameNetwork/GameSpy/PeerThread.h"
 #include "GameNetwork/GameSpy/PersistentStorageThread.h"
 #include <cstdio>
+#include <cstdlib>
 
 // GeneralsX @bugfix fbraz3 23/08/2026 Prevent legacy UI callbacks from crashing when trying to send GameSpy requests by providing dummy message queues
 // Dummy implementations to prevent legacy UI callbacks from crashing when trying to send GameSpy requests
@@ -66,20 +67,29 @@ bool NGMP_OnlineServicesManager::init() {
         return true;
     }
 
-    fprintf(stderr, "[NGMP] Initializing NGMP Online Services (server: %s)\n",
-            NGMP::SanitizeURL(NGMP::GetServerRESTEndpoint()).c_str());
-    fflush(stderr);
+    const bool genAuthorityMode = std::getenv("GEN_AUTHORITY_HOST") != nullptr;
+    if (genAuthorityMode) {
+        // GEN owns discovery, lobby routing, and gameplay authority. Keep only
+        // the legacy compatibility singletons below; do not initialize or
+        // contact the GeneralsOnline/NGMP backend.
+        fprintf(stderr, "[GEN] GeneralsOnline/NGMP backend disabled; using GEN authority server\n");
+        fflush(stderr);
+    } else {
+        fprintf(stderr, "[NGMP] Initializing NGMP Online Services (server: %s)\n",
+                NGMP::SanitizeURL(NGMP::GetServerRESTEndpoint()).c_str());
+        fflush(stderr);
 
-    // Initialize sub-interfaces
-    if (!m_pAuthInterface) m_pAuthInterface = new NGMP_OnlineServices_AuthInterface();
-    if (!m_pLobbyInterface) m_pLobbyInterface = new NGMP_OnlineServices_LobbyInterface();
-    if (!m_pRoomInterface) m_pRoomInterface = new NGMP_OnlineServices_RoomsInterface();
-    if (!m_pStatsInterface) m_pStatsInterface = new NGMP_OnlineServices_StatsInterface();
-    if (!m_pSocialInterface) m_pSocialInterface = new NGMP_OnlineServices_SocialInterface();
-    if (!m_pWebSocketWrapper) m_pWebSocketWrapper = std::make_shared<WebSocket>();
+        // Initialize sub-interfaces only for the upstream GeneralsOnline path.
+        if (!m_pAuthInterface) m_pAuthInterface = new NGMP_OnlineServices_AuthInterface();
+        if (!m_pLobbyInterface) m_pLobbyInterface = new NGMP_OnlineServices_LobbyInterface();
+        if (!m_pRoomInterface) m_pRoomInterface = new NGMP_OnlineServices_RoomsInterface();
+        if (!m_pStatsInterface) m_pStatsInterface = new NGMP_OnlineServices_StatsInterface();
+        if (!m_pSocialInterface) m_pSocialInterface = new NGMP_OnlineServices_SocialInterface();
+        if (!m_pWebSocketWrapper) m_pWebSocketWrapper = std::make_shared<WebSocket>();
 
-    if (!TheNGMPGame) {
-        TheNGMPGame = new NGMPGame();
+        if (!TheNGMPGame) {
+            TheNGMPGame = new NGMPGame();
+        }
     }
 
     // Initialize GameSpy and UI singletons to prevent legacy UI crashes (e.g. WOLWelcomeMenu, PopupPlayerInfo, WOLLobbyMenu)
