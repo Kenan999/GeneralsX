@@ -1174,6 +1174,7 @@ if(SAGE_USE_NGMP)
         Source/GameNetwork/GeneralsOnline/NGMP_Helpers.cpp
         Source/GameNetwork/GeneralsOnline/NetworkMesh.cpp
         Source/GameNetwork/GeneralsOnline/NextGenTransport.cpp
+        Source/GameNetwork/GeneralsOnline/GenAuthorityTransport.cpp
     )
 endif()
 

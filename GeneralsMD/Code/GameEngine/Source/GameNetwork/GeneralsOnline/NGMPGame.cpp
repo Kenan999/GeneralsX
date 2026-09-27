@@ -2,6 +2,7 @@
 #include "GameNetwork/GeneralsOnline/NGMP_interfaces.h"
 #include "GameNetwork/GeneralsOnline/NGMP_Helpers.h"
 #include "GameNetwork/GeneralsOnline/NextGenTransport.h"
+#include "GameNetwork/GeneralsOnline/GenAuthorityTransport.h"
 #include "GameLogic/VictoryConditions.h"
 #include "Common/PlayerList.h"
 #include "Common/Player.h"
@@ -15,6 +16,7 @@
 #include "Common/GlobalData.h"
 #include "GameClient/View.h"
 #include "GameClient/InGameUI.h"
+#include <cstdlib>
 
 void showNotificationBox( AsciiString nick, UnicodeString message);
 
@@ -304,7 +306,16 @@ void NGMPGame::launchGame(void)
 	TheNetwork = NetworkInterface::createNetwork();
 	TheNetwork->init();
 	TheNetwork->setLocalAddress(getLocalIP(), 8888);
-	NextGenTransport* pTransport = new NextGenTransport;
+	Transport* pTransport = nullptr;
+	if (std::getenv("GEN_AUTHORITY_HOST") != nullptr)
+	{
+		pTransport = new GenAuthorityTransport;
+		fprintf(stderr, "[GEN-AUTH] authoritative relay transport enabled\n");
+	}
+	else
+	{
+		pTransport = new NextGenTransport;
+	}
 	pTransport->init(getLocalIP(), 8888);
 	TheNetwork->attachTransport(pTransport);
 	TheNetwork->parseUserList(this);
