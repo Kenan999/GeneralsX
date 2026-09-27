@@ -644,7 +644,7 @@ void GameEngine::init()
 		if (!TheAudio->isMusicAlreadyLoaded())
 		{
 			const char* authorityRole = std::getenv("GEN_AUTHORITY_ROLE");
-			if (!(TheGlobalData->m_headless && authorityRole && stricmp(authorityRole, "authority") == 0))
+			if (!(TheGlobalData->m_headless && authorityRole && (stricmp(authorityRole, "authority") == 0 || stricmp(authorityRole, "client-headless") == 0)))
 				setQuitting(TRUE);
 		}
 

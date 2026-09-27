@@ -231,7 +231,7 @@ Int NGMPGame::getLocalSlotNum(void) const
 		return -1;
 
 	const char* authorityRole = std::getenv("GEN_AUTHORITY_ROLE");
-	if (authorityRole && stricmp(authorityRole, "authority") == 0)
+	if (authorityRole && (stricmp(authorityRole, "authority") == 0 || stricmp(authorityRole, "client-headless") == 0))
 	{
 		const char* slot = std::getenv("GEN_AUTHORITY_SLOT");
 		Int s = slot ? atoi(slot) : 7;
@@ -438,7 +438,7 @@ void NGMPGame::launchGame(void)
 Bool StartGenAuthorityHeadlessFromEnvironment()
 {
 	const char* role = std::getenv("GEN_AUTHORITY_ROLE");
-	if (!role || stricmp(role, "authority") != 0)
+	if (!role || (stricmp(role, "authority") != 0 && stricmp(role, "client-headless") != 0))
 		return FALSE;
 
 	if (TheNGMPGame != nullptr)
