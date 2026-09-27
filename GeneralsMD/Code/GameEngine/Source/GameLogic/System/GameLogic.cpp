@@ -1384,7 +1384,7 @@ void GameLogic::tryStartNewGame( Bool loadingSaveGame )
 
 	// Get the m_loadScreen for this kind of game
 	const char* genAuthorityRole = std::getenv("GEN_AUTHORITY_ROLE");
-	const Bool genHeadlessAuthority = TheGlobalData->m_headless && genAuthorityRole && stricmp(genAuthorityRole, "authority") == 0;
+	const Bool genHeadlessAuthority = TheGlobalData->m_headless && genAuthorityRole && (stricmp(genAuthorityRole, "authority") == 0 || stricmp(genAuthorityRole, "client-headless") == 0);
 	if(!m_loadScreen && !genHeadlessAuthority && !(TheRecorder && TheRecorder->getMode() == RECORDERMODETYPE_SIMULATION_PLAYBACK))
 	{
 		m_loadScreen = getLoadScreen( loadingSaveGame );
@@ -4136,6 +4136,12 @@ void GameLogic::update()
 	{
 		m_frame++;
 		m_hasUpdated = TRUE;
+		const char* genRole = std::getenv("GEN_AUTHORITY_ROLE");
+		if (genRole && (m_frame % 100) == 0)
+		{
+			fprintf(stderr, "[GEN-AUTH] role=%s simulationFrame=%u\n", genRole, m_frame);
+			fflush(stderr);
+		}
 	}
 }
 
